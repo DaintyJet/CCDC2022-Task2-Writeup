@@ -35,6 +35,15 @@ Once this is done we can use the docker file in the stack/compose file, or for a
 ### Dockerfile
 sssssssssssssssssssssssssssssssssssss
 
+Currently need to build on all systems that will host it... Put on dockerhub! 
+
+Have yet to test if it will work (I.e) ssh is working. But the webserver still works 
+On first check sshd is not running! Once enabled it will run? Between build and entereing it stops..
+
+
+Rewrote the entrypoint.
+
+May want to add DB hostname env variable usage? 
 
 ### Uploading to Docker hub
 SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS
@@ -663,4 +672,8 @@ https://www.haproxy.com/blog/route-ssh-connections-with-haproxy/
 
 Docker DNS resolution HA
 https://www.haproxy.com/blog/haproxy-on-docker-swarm-load-balancing-and-dns-service-discovery/
+
+
+Basic Structure HA
+https://www.haproxy.com/blog/the-four-essential-sections-of-an-haproxy-configuration
 
