@@ -24,6 +24,7 @@ There are three types of containers used in this scenario.
    * In this scenario we are using the [HAProxy](https://hub.docker.com/_/haproxy) container. This is an TCP/HTTP proxy.
 1. Web server containers, or service containers. These are containers that clients will need to establish connections with through the proxy. We also will want to enable SSH on them, and connect with SSH through the proxy.
    * In this scenario we use a custom image that will (likely) need to be modified to enable SSH. It is a [django container](https://hub.docker.com/r/sh0rtcyb3r/ccdc23_af_django)
+   * We did modify this container and it is located a https://hub.docker.com/r/daintyjet/ccdc23_af_django_ssh
 1. Database containers, or protected containers. Theses containers are not supposed to be accessible to the proxy or any outside systems. Only the Web server or service containers should be able to access these containers. 
    * This is simply going to be a database container(s), in our case it is going to be a [postgres](https://hub.docker.com/_/postgres) databse  
 ### Enabling SSH on Containers  
@@ -37,16 +38,78 @@ sssssssssssssssssssssssssssssssssssss
 
 Currently need to build on all systems that will host it... Put on dockerhub! 
 
-Have yet to test if it will work (I.e) ssh is working. But the webserver still works 
-On first check sshd is not running! Once enabled it will run? Between build and entereing it stops..
+Since we are using docker file we can build off of an existing container with relative ease using the **FROM** directive. The modifications to the container will include using the **RUN** directive to make the user(s), and download the ssh server we will use. Then the **COPY** directive will be used to copy our slightly modified entrypoint script into the container.
+
+We **do not** need to use the **EXPOSE** keyword, the ports are open internally to the docker network, we do not want the port to available externally!
+
+The first thing we will want to do is write the **Dockerfile** we will use to build the **Image** 
+```Dockerfile
+# Building off of an already existing image, simplifies this as we do not have to redo 
+# The steps that were done to make the original container
+FROM sh0rtcyb3r/ccdc23_af_django:latest
+
+# We can chain shell commands together with the "&&" symbol. So this creates a new user with a home directory too.
+# We assign a password to the user so that we can log in through SSH. I created a group and added the user to 
+# The group too, though this is not necessary.
+RUN useradd -m user && echo "user:1qazxsW@1"|chpasswd && groupadd sshUser && usermod -aG sshUser user 
+
+# This directive runs commands to update the package manager's source lists (allowing most up to date binaries)
+# We also run the command to install the open-ssh server we use the -y flag to confirm it as during the 
+# Build we can not type yes (y) 
+RUN apt-get update && apt-get install openssh-server -y
+
+# This copies the entrypoint.sh file from the directory we are currently in to the root directory of the container
+COPY entrypoint.sh /
+
+# Set the command to be run on startup as the entrypoint.sh command
+ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
+```
+
+As mentioned earlier we need to edit the entrypoint.sh file a little so that we start the Open-SSH server that we installed in the modified **Dockerfile**.
+
+```bash
+# Change to the Code directory, as this is where the server files are located 
+# And this is where we need to run the Django specific commands 
+cd /code
+
+# We need to start the SSH server so this container can server a dual purpose
+/etc/init.d/ssh start
+
+# Django Specific commands
+# Only thing to note is the server listens on 8000!
+python manage.py makemigrations
+python manage.py migrate 
+python manage.py runserver 0.0.0.0:8000
+
+```
 
 
-Rewrote the entrypoint.
+There were a few **issues** I ran into when writing the entrypoint script. The main issue was when I ran the **service ssh start** command which appears to be a wrapper for the **/etc/init.d/ssh start** the process of starting the SSH server failed. However when I would  enter the container using **docker exec -it \<ContainerID/Name\> /bin/bash** and manually start the SSH service using the **service** commands it would work fine.
 
-May want to add DB hostname env variable usage? 
+> ![working_ssh](Task2Images\LC-Dokcer-SSH-Proof.png)
+> Just to provide some sanity to those who may struggle here is a screenshot showing that it is working using the **Image** generated from out docker file to create the containers.
 
 ### Uploading to Docker hub
-SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS
+
+For this part I (Matt) will be uploading the container to my own docker account and a repository I create there. It is possible to upload to an organization's repository that you are a part of as well.
+
+1. We need to make the repository this can be done once you have logged into [docker hub](https://hub.docker.com/)
+> ![create_repository](Task2Images/C-Docker-Repository.png)
+1. The repository will need a name and other information filled out
+> ![Fill_info](Task2Images/C-Docker-Rep-Info.png)
+1. Once the repository is created you will see the following 
+> ![empty_rep](Task2Images/C-Docker-Rep-Info.png)
+1. Build and Tag the Docker image. This can be done in many different ways.
+   * The fist way I often do it is **docker build -t \<hub-user/repository-name:Tag\> .** the "." can be replaced with a path to a Dockerfile
+   * We can first build the image with the build the image and later tag it using **docker tag \<existingContainer\> \<hub-user/repository-name:Tag\>**
+   * Or this can be done with a build container when committing it **docker commit \<existingContainer\> <hub-user/repository-name:tag> 
+> ![build_tag](Task2Images/L-Docker-Build-Tag.png)
+> This is an image of me using the build and tag method on my local machine.
+1. Use the **docker push hub-user/repository-name:tag** command to push the container (with the repositories name) that has the specified tag to the repository.
+> ![docker_push](Task2Images/L-Docker-Push.png) 
+> I used my local machine so I could be logged into the docker desktop and make the pushing process a little easier 
+
+Now the image is available on docker hub!
 
 ## Docker Networks
 
@@ -127,7 +190,7 @@ We will need a service for the HAProxy container, the Database container(s) and 
   web1:
     # This is the image that the container will be built off of. 
     # In this case it is a custom Django image
-    image: sh0rtcyb3r/ccdc23_af_django:latest
+    image: daintyjet/ccdc23_af_django_ssh
 
     # Define environment variables that will be imported and used by the 
     # container and the program running in it. This is not a secure method of 
@@ -654,6 +717,9 @@ Ref [sources](#sources)
 ## Sources
 Docker Compose
 https://docs.docker.com/compose/compose-file/compose-file-v3/
+
+Docker Repository 
+https://docs.docker.com/docker-hub/repos/#:~:text=To%20push%20an%20image%20to,docs%2Fbase%3Atesting%20)
 
 Docker Swarm Node Management
 https://docs.docker.com/engine/swarm/manage-nodes/

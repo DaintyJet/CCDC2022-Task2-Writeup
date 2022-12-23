@@ -45,7 +45,7 @@ services:
   web1:
     # This is the image that the container will be built off of. 
     # In this case it is a custom Django image
-    image: sh0rtcyb3r/ccdc23_af_django:latest
+    image: daintyjet/ccdc23_af_django_ssh
 
     # Define environment variables that will be imported and used by the 
     # container and the program running in it. This is not a secure method of 
@@ -82,8 +82,8 @@ services:
       restart_policy:
         condition: on-failure
 
-  web2:
-    image: sh0rtcyb3r/ccdc23_af_django:latest
+  web2: # unless sorce code is edited, will not connect to db2 -- better to use Gluster and replicated DB
+    image: daintyjet/ccdc23_af_django_ssh
     environment:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=postgres
