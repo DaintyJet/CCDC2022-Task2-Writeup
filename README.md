@@ -34,8 +34,6 @@ As we are using a "normal" web container that does not have SSH enabled we are g
 Once this is done we can use the docker file in the stack/compose file, or for a more long term and flexible solution tag the image and upload it to [docker hub](https://hub.docker.com/)
 
 ### Dockerfile
-sssssssssssssssssssssssssssssssssssss
-
 Currently need to build on all systems that will host it... Put on dockerhub! 
 
 Since we are using docker file we can build off of an existing container with relative ease using the **FROM** directive. The modifications to the container will include using the **RUN** directive to make the user(s), and download the ssh server we will use. Then the **COPY** directive will be used to copy our slightly modified entrypoint script into the container.
@@ -86,7 +84,7 @@ python manage.py runserver 0.0.0.0:8000
 
 There were a few **issues** I ran into when writing the entrypoint script. The main issue was when I ran the **service ssh start** command which appears to be a wrapper for the **/etc/init.d/ssh start** the process of starting the SSH server failed. However when I would  enter the container using **docker exec -it \<ContainerID/Name\> /bin/bash** and manually start the SSH service using the **service** commands it would work fine.
 
-> ![working_ssh](Task2Images\LC-Dokcer-SSH-Proof.png)
+> ![working_ssh](Task2Images/LC-Dokcer-SSH-Proof.png)
 > Just to provide some sanity to those who may struggle here is a screenshot showing that it is working using the **Image** generated from out docker file to create the containers.
 
 ### Uploading to Docker hub
