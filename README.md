@@ -336,6 +336,7 @@ If we notice that there are issues with the specified service we can use the log
 $ docker service logs <ServiceName/ID>
 ```
 > ![service_logs](Task2Images/L-Service-Logs-HA.png)
+> 
 > Image of "docker service logs \<ID\>" and its resulting output
 
 We can do this same operation on individual containers as long as we are on the machine they are running on with the following command.
@@ -343,6 +344,7 @@ We can do this same operation on individual containers as long as we are on the 
 $ docker logs <ContainerID>
 ```
 > ![container_logs](Task2Images/L-Docker-Logs.png)
+> 
 > Image of "docker logs \<ContainerID\>" and its resulting output
 
 We can delete the entire stack with the following command from the **Manager** node.
