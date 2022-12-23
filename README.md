@@ -84,6 +84,8 @@ python manage.py runserver 0.0.0.0:8000
 
 There were a few **issues** I ran into when writing the entrypoint script. The main issue was when I ran the **service ssh start** command which appears to be a wrapper for the **/etc/init.d/ssh start** the process of starting the SSH server failed. However when I would  enter the container using **docker exec -it \<ContainerID/Name\> /bin/bash** and manually start the SSH service using the **service** commands it would work fine.
 
+A complete version of the [entrypoint.sh](Code-Files/Dockerfile/entrypoint.sh) and [Dockerfile](Code-Files\Dockerfile\Dockerfile) can be found in this repository by clicking on the hyperlinks seen previously.
+
 > ![working_ssh](Task2Images/LC-Dokcer-SSH-Proof.png)
 > Just to provide some sanity to those who may struggle here is a screenshot showing that it is working using the **Image** generated from out docker file to create the containers.
 
@@ -107,7 +109,10 @@ For this part I (Matt) will be uploading the container to my own docker account 
 > ![docker_push](Task2Images/L-Docker-Push.png) 
 > I used my local machine so I could be logged into the docker desktop and make the pushing process a little easier 
 
-Now the image is available on docker hub!
+Now the image is available on docker hub! This image we created is at [this repository](https://hub.docker.com/r/daintyjet/ccdc23_af_django_ssh) with the following URL.
+```
+https://hub.docker.com/r/daintyjet/ccdc23_af_django_ssh
+```
 
 ## Docker Networks
 
