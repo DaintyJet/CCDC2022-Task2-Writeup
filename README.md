@@ -717,7 +717,196 @@ Now we have a working load balancing proxy for HTTPS traffic. A [complete versio
 
 ### SSH Configuration
 
-Ref [sources](#sources)
+#### Resolver
+This is a structure defined in HAProxy to allow for DNS resolution, this can be used to resolve backend addresses dynamically. You are given quite a bit of control in how long a response and type of response is valid. This is not needed for this task, as you can have a different backend for each server, you can refer to their [example](https://www.haproxy.com/blog/route-ssh-connections-with-haproxy/). But the idea is you analyze the sever name in the request and jump to the backend with that name.
+
+```python
+# Define a resolver section for DNS resolution 
+# Accessed through the tcp-content do-resolve action
+resolvers swarm_internal
+    # Define the max payload size accepted 
+    accepted_payload_size 8192
+
+    # Define the nameserver(s) that this resolver will use
+    # Use the Swarm resolver at ist default location
+    nameserver swarm 127.0.0.11:53
+
+    # Max number of retires for resolution sent to the resolver 
+    resolve_retries 3
+    # Default time to trigger name resolutions 
+    timeout resolve 1s
+    # Time that is waited between DNS queries when no valid response is received
+    timeout retry 1s
+
+    # Hold defines the amount of time the last name resolution should be kept
+    # Base on the last resolution status. This can be results that lead to it being up, or down. 
+
+    # If OTHER status hold it for 30s
+    hold other           30s
+    # If refused hold it for 30s
+    hold refused         30s
+    # If non-existent hold for 30s 
+    hold nx              30s
+    # If request timeout hold for 30s 
+    hold timeout         30s
+    # If the request is received and valid 10s
+    hold valid           10s
+    # If it is obsolete hold for 30s
+    hold obsolete        30s
+```
+
+#### Frontend
+There are a few ways we can create this frontend server.
+
+The following method uses the previously defined resolver to resolve the hostname we provide in the **ssh -o ProxyCommand="..."** command.
+
+This definition also implements some basic checking to ensure the protocol used is SSH by getting the first 7 bytes of the payload and ensuring they are the "SSH-2.0" string. If this is not the case the request will be rejected. The log format is provided by the HAProxy guide I was looking through, is not necessary but can provide [useful information based on the format](https://www.haproxy.com/blog/introduction-to-haproxy-logging/#:~:text=HAProxy%20Log%20Format,-The%20type%20of).
+
+
+As mentioned we use the previously defined resolver through the tcp-request content do-resolve command. The result is saved in the sess.dstIP variable. 
+```python
+# Define a frontend to handel SSH connections
+frontend ssh_handler
+    # Set mode to TCP, go against the default of HTTP
+    mode tcp
+    # Bind on listening for all traffic on port 2222
+    # We chose 2222 so it mirrors the docker port mapping
+    # Use SSL certificate
+    bind *:2222 ssl crt /usr/local/etc/haproxy/haproxy1.pem
+
+    # Wait 5 seconds before closing connection  
+    tcp-request inspect-delay 5s
+    # This req.payload extracts the binary contents at position 0 with a length of 7 bytes
+    # The ACL takes a value of it being compared to the string SSH-2.0
+    acl valid_payload req.payload(0,7) -m str "SSH-2.0"
+    # Reject the TCP Connection if the payload is not valid (not SSH connection determined above)
+    tcp-request content reject if !valid_payload
+    # Accept the TCP Connection if the payload is valid (is SSH ad determined above)
+    tcp-request content accept if { req_ssl_hello_type 1 }
+
+    # This is from HAProxy, it is a log format that will allow us to get destination hints from the SSH command
+    log-format "%ci:%cp [%t] %ft %b/%s %Tw/%Tc/%Tt %B %ts %ac/%fc/%bc/%sc/%rc %sq/%bq dstName:%[var(sess.dstName)] dstIP:%[var(sess.dstIP)] "
+
+    # Use the resolver to resolve an IPv4 address, saves it to destIP variable in memory. This is done based on the input ssl_fc_sni 
+    # ssl_fc_sni is a locally extracted variable from the TLS/SSL connection the Server Name Indication field.
+    tcp-request content do-resolve(sess.dstIP,swarm_internal,ipv4) ssl_fc_sni
+    # Saves TCP req content in an accessible in memory value of the logged felid
+    tcp-request content set-var(sess.dstName) ssl_fc_sni
+
+    # Use a single backend with the resolved IP to route 
+    #default_backend be_ssh_all
+    default_backend be_ssh_all
+```
+
+
+We can use an **alternate** frontend without the need of a **resolver**. This uses only the ssl_fc_sni feild to determine which **hard coded** backend to use.
+
+Everything is the same except for how we chose the backend!
+
+**The following is an alternative definition**
+```python
+# Define a frontend to handel SSH connections
+frontend ssh_handler
+    # Set mode to TCP, go against the default of HTTP
+    mode tcp
+    # Bind on listening for all traffic on port 2222
+    # We chose 2222 so it mirrors the docker port mapping
+    # Use SSL certificate
+    bind *:2222 ssl crt /usr/local/etc/haproxy/haproxy1.pem
+
+    # Wait 5 seconds before closing connection  
+    tcp-request inspect-delay 5s
+    # This req.payload extracts the binary contents at position 0 with a length of 7 bytes
+    # The ACL takes a value of it being compared to the string SSH-2.0
+    acl valid_payload req.payload(0,7) -m str "SSH-2.0"
+    # Reject the TCP Connection if the payload is not valid (not SSH connection determined above)
+    tcp-request content reject if !valid_payload
+    # Accept the TCP Connection if the payload is valid (is SSH ad determined above)
+    tcp-request content accept if { req_ssl_hello_type 1 }
+
+    # This is from HAProxy, it is a log format that will allow us to get destination hints from the SSH command
+    log-format "%ci:%cp [%t] %ft %b/%s %Tw/%Tc/%Tt %B %ts %ac/%fc/%bc/%sc/%rc %sq/%bq dst:%[var(sess.dstName)] "
+
+    # Saves TCP req content in an accessible in memory value of the logged felid
+    tcp-request content set-var(sess.dst) ssl_fc_sni
+
+    # Use a single backend with the resolved IP to route 
+    use_backend %[ssl_fc_sni]
+
+```
+
+#### Backend
+
+Again there will be **TWO** methods of writing the backend(s). 
+
+**FIRST** is the **resolved DNS** backend. 
+
+**THERE IS CURRENTLY NO ADDITIONAL SECURITY IMPLEMENTED I LEAVE THAT TO OTHERS!**
+
+The tcp-request content set-dst var will fill in the destination felid of the packet so that it can be broadcast to the docker swarm network, and received by the intended host.
+
+```python
+backend be_ssh_all 
+    # Set mode to TCP, go against the default of HTTP
+    mode tcp
+
+    # Limit access by using an ACL to limit the allowed IPs
+    # These are true if destIP is equal to the "ip X.X.X.X" 
+    # acl allowed_destination var(sess.dstIP) -m ip 
+    # acl allowed_destination var(sess.dstIP) -m ip 
+
+    # We can filter based on the resolved hostname as well further restricting access
+    #acl allowed_server_names var(sess.dstName)
+    #acl allowed_server_names var(sess.dstName) 
+
+    # Edit the TCP requests destination to be the resolved IP
+    tcp-request content set-dst var(sess.dstIP)
+
+    # Accept the request if the requested server is valid
+    #tcp-request content accept if allowed_server_names
+    # Accept the request if the resolved IP is valid
+    #tcp-request content accept if allowed_destination
+    # Reject the tcp request if it has not been accepted 
+    #tcp-request content reject
+
+    # Broadcast to server?
+    server ssh 0.0.0.0:22
+```
+
+The **SECOND** method where we only use the ssl_fc_sni value to determine the backend to use requires multiple hardcoded backends, one for each server.
+
+```python
+# Hardcoded backends for method 2
+backend be_web1
+    mode tcp
+    server s1 web1:22
+backend be_web2:
+    mode tcp
+    server s1 web2:22
+```
+
+#### Use
+
+We will use the ProxyCommand option SSH provides to change the value in the servername field that is the ssl_fc_sni value. 
+
+The command will be as follows
+
+```sh
+# -connect describes the IP:Port the initial connection is made to
+# - servername changes the value in the ssl_fc_sni value in HAProxy, depending on the method you would input the DNS or Backend name
+# We provide a username to connect to and a dummy name, this dummy name does not matter much as it is not used for anything  
+$ ssh -o ProxyCommand="openssl s_client -quiet -connect <IPHaproxy:port> -servername <DNSName/BackendName>" <Usename>@<DummyValue>
+```
+> ![ssh_conn_dns](Task2Images/L-SSH-Conn-DNS.png)
+> This is an example of the output one would see when they run this command
+
+## ISSUES 
+
+When running the stack on a single node swarm a number of issues occurred. The first is that if there are two services (Database services) that access the same volume for persistance, it **does not** appear to work. Likely due to concurrency and memory access issues as they try to initialize the DB on the same volume. Using replicated instances would likely help.
+
+Since a label can only have one value, The labels were changed so all containers could be hosted on the same node.
+
+When SSH is dropped due to an ACL you will likely see **kex_exchange_identification: Connection closed by remote host**
 
 ## Sources
 Docker Compose
@@ -744,6 +933,8 @@ https://www.haproxy.com/blog/route-ssh-connections-with-haproxy/
 Docker DNS resolution HA
 https://www.haproxy.com/blog/haproxy-on-docker-swarm-load-balancing-and-dns-service-discovery/
 
+Resolver 
+https://www.haproxy.com/documentation/hapee/latest/configuration/config-sections/resolvers/
 
 Basic Structure HA
 https://www.haproxy.com/blog/the-four-essential-sections-of-an-haproxy-configuration
