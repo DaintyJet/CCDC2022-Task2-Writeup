@@ -13,7 +13,7 @@ There are three types of containers used in this scenario.
    * In this scenario we use a custom image that will (likely) need to be modified to enable SSH. It is a [django container](https://hub.docker.com/r/sh0rtcyb3r/ccdc23_af_django)
    * We did modify this container and it is located a https://hub.docker.com/r/daintyjet/ccdc23_af_django_ssh
 1. Database containers, or protected containers. Theses containers are not supposed to be accessible to the proxy or any outside systems. Only the Web server or service containers should be able to access these containers. 
-   * This is simply going to be a database container(s), in our case it is going to be a [postgres](https://hub.docker.com/_/postgres) databse  
+   * This is simply going to be a database container(s), in our case it is going to be a [postgres](https://hub.docker.com/_/postgres) database  
 ### Enabling SSH on Containers  
 
 As we are using a "normal" web container that does not have SSH enabled we are going to need to use a [Dockerfile](https://docs.docker.com/engine/reference/builder/) to enable SSH on the container, and create an account and password so we can SSH into the container. 
@@ -812,7 +812,7 @@ frontend ssh_handler
     tcp-request content accept if { req_ssl_hello_type 1 }
 
     # This is from HAProxy, it is a log format that will allow us to get destination hints from the SSH command
-    log-format "%ci:%cp [%t] %ft %b/%s %Tw/%Tc/%Tt %B %ts %ac/%fc/%bc/%sc/%rc %sq/%bq dst:%[var(sess.dstName)] "
+    log-format "%ci:%cp [%t] %ft %b/%s %Tw/%Tc/%Tt %B %ts %ac/%fc/%bc/%sc/%rc %sq/%bq dst:%[var(sess.dst)] "
 
     # Saves TCP req content in an accessible in memory value of the logged felid
     tcp-request content set-var(sess.dst) ssl_fc_sni
