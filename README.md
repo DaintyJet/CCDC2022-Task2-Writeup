@@ -1,19 +1,6 @@
 # Task 2 Walkthrough
 Initial Work taken from the CCDC Airforce Challege
 
-#### TODO
-1. All
-2. Enable SSH on the Container
-   1. Account?
-      1. Password
-   2. Tag and push to docker hub???
-3. Work on HAProxy SSH
-   1. TCP front end 
-   2. Bind to 22 
-   3. Use a seperate backend for each container
-
-
-
 ## "Physical" Infrastructure Layout
 A set of **N** Physical machines where **N** is greater than or equal to one. There will be at least **M** managers where **M** is greater than 1, but less than **N**, There are conventions where between 3-7(5) is the max you would want. **SOURCE** 
 
@@ -450,7 +437,7 @@ key: C:/Users/matth/Downloads/EasyRSA-3.1.1/pki/private/haproxy1.key
 
 # This command will sign the request we generated earlier using the CA's Private key
 # We specify we are creating a server certificate, this could be a client or ca certificate too.
-# EasyRSA will display information about the cetificate and ask us to confirm that it is correct. We do this by typing yes
+# EasyRSA will display information about the certificate and ask us to confirm that it is correct. We do this by typing yes
 # Then we will be asked for the passphrase to use the CA's key we generated earlier
 $ easyrsa sign-req server <reqName/ID>
 * Using SSL: openssl OpenSSL 3.0.5 5 Jul 2022 (Library: OpenSSL 3.0.5 5 Jul 2022)
